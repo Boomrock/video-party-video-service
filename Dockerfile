@@ -7,8 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache \
     gcc \
     g++ \
-    musl-dev\
-    ffmpeg
+    musl-dev
 
 # Копируем go.mod и go.sum для кэширования зависимостей
 COPY go.* ./
@@ -32,7 +31,7 @@ FROM alpine:latest AS final
 
 # Устанавливаем необходимые зависимости (например, для работы с сертификатами)
 RUN apk --no-cache add ca-certificates
-
+RUN apk add ffmpeg
 # Устанавливаем рабочую директорию
 WORKDIR /root/
 
