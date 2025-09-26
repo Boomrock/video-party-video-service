@@ -31,8 +31,9 @@ func ConvertToMP4(inputPath string, outputPath string) error {
 	args := []string{
 		"-i", inputPath,
 		"-c:v", "libx264",
-		"-crf", "26",
+		"-crf", "20",
 		"-preset", "ultrafast",
+		"-vf", "scale=1280:-1",
 		"-c:a", "aac",
 		"-b:a", "192k",
 		"-movflags", "+faststart",
