@@ -36,11 +36,13 @@ func main() {
 	router.Use(middleware.Recoverer)                 // Восстановление после паники
 	router.Use(middleware.Timeout(30 * time.Second)) // Таймаут на обработку
 
-	router.Get("/video", video.Sender(&streamer, sqllite))
-	router.Get("/allVideo", video.GetAllVideo(sqllite))
-	router.Post("/videoUpload", video.Upload(sqllite))
+	router.Route("/video", func(r chi.Router) {
+		r.Get("/", video.Sender(&streamer, sqllite))
+		r.Get("/all", video.GetAllVideo(sqllite))
+		r.Get("/upload", video.Upload(sqllite))
+		r.Get("/delete", video.Delete(sqllite))
+	})
 
 	fmt.Println("Сервер запущен на http://localhost:8080")
-	fmt.Println("Открой в браузере: http://localhost:8080/video")
 	http.ListenAndServe(":8080", router)
 }
