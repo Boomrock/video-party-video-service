@@ -32,9 +32,9 @@ func ConvertToMP4(inputPath string, outputPath string) error {
 		"-i", inputPath,
 		"-c:v", "libx264",
 		"-crf", "26",
-		"-preset", "superfast",
+		"-preset", "ultrafast",
 		"-c:a", "aac",
-		"-b:a", "128k",
+		"-b:a", "192k",
 		"-movflags", "+faststart",
 		outputPath,
 	}
