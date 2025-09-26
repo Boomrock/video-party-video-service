@@ -11,17 +11,10 @@ import (
 	"log/slog"
 )
 
-// get?
-// file_name - имя файла видео String
+// GET /video?file_name=...
 func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
-		// Обрабатываем запрос
-		// Делегируем получение куска видео
-		// Отправляем кусок видео
-
 		videoName := r.URL.Query().Get("file_name")
-
 		if videoName == "" {
 			slog.Error("Отсутствует обязательный параметр: file_name",
 				"удалённый_адрес", r.RemoteAddr,
@@ -39,26 +32,40 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 				"ошибка", err,
 				"удалённый_адрес", r.RemoteAddr,
 			)
-			http.Error(w, "video not found", http.StatusBadRequest)
+			http.Error(w, "video not found", http.StatusNotFound) // ✅ 404 вместо 400
 			return
 		}
 
 		rangeHeader := r.Header.Get("Range")
-		var start, end int
+		var start, end int64
 
 		if rangeHeader == "" {
 			// По умолчанию — первые 1 МБ
 			start = 0
 			end = 1024*1024 - 1
 		} else {
-			// Разбираем заголовок Range: "bytes=start-end"
 			rangeParts := strings.TrimPrefix(rangeHeader, "bytes=")
-			rangeValues := strings.Split(rangeParts, "-")
-			var err error
+			parts := strings.Split(rangeParts, "-")
+			if len(parts) != 2 {
+				slog.Error("Некорректный формат заголовка Range",
+					"диапазон", rangeHeader,
+					"удалённый_адрес", r.RemoteAddr,
+				)
+				http.Error(w, "Invalid range format", http.StatusBadRequest)
+				return
+			}
 
-			// Начальный байт
-			start, err = strconv.Atoi(rangeValues[0])
-			if err != nil {
+			// Парсим start
+			if parts[0] == "" {
+				slog.Error("Отсутствует начальный байт в Range",
+					"диапазон", rangeHeader,
+					"удалённый_адрес", r.RemoteAddr,
+				)
+				http.Error(w, "Invalid range: missing start", http.StatusBadRequest)
+				return
+			}
+			start, err = strconv.ParseInt(parts[0], 10, 64)
+			if err != nil || start < 0 {
 				slog.Error("Некорректный начальный байт в заголовке Range",
 					"диапазон", rangeHeader,
 					"ошибка", err,
@@ -68,10 +75,13 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 				return
 			}
 
-			// Конечный байт или по умолчанию
-			if len(rangeValues) > 1 && rangeValues[1] != "" {
-				end, err = strconv.Atoi(rangeValues[1])
-				if err != nil {
+			// Парсим end
+			if parts[1] == "" {
+				// Если конец не указан — до конца файла
+				end = video.Size - 1
+			} else {
+				end, err = strconv.ParseInt(parts[1], 10, 64)
+				if err != nil || end < start {
 					slog.Error("Некорректный конечный байт в заголовке Range",
 						"диапазон", rangeHeader,
 						"ошибка", err,
@@ -80,16 +90,28 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 					http.Error(w, "Invalid end byte", http.StatusBadRequest)
 					return
 				}
-			} else {
-				end = start + 1024*1024 - 1 // По умолчанию — 1 МБ
 			}
 		}
 
-		// Убедимся, что конец не выходит за размер видео
+		// 🔒 Проверка: start за пределами файла → 416
+		if start >= video.Size {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", video.Size))
+			slog.Warn("Запрошенный диапазон вне размера видео",
+				"имя_видео", videoName,
+				"start", start,
+				"size", video.Size,
+				"удалённый_адрес", r.RemoteAddr,
+			)
+			http.Error(w, "Requested range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+
+		// 🔒 Обрезаем end по размеру файла
 		if end >= video.Size {
 			end = video.Size - 1
 		}
 
+		// Теперь безопасно читаем
 		videoData, err := streamer.Seek(video, start, end)
 		if err != nil {
 			slog.Error("Ошибка при получении фрагмента видео",
@@ -102,12 +124,13 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 			return
 		}
 
-		// Устанавливаем заголовки и отправляем фрагмент
+		// ✅ Устанавливаем правильные заголовки
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, video.Size))
 		w.Header().Set("Accept-Ranges", "bytes")
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(videoData)))
+		w.Header().Set("Content-Length", strconv.Itoa(len(videoData)))
 		w.Header().Set("Content-Type", "video/mp4")
 		w.WriteHeader(http.StatusPartialContent)
+
 		_, err = w.Write(videoData)
 		if err != nil {
 			slog.Error("Ошибка при потоковой передаче видео клиенту",
@@ -118,7 +141,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 				"ошибка", err,
 				"удалённый_адрес", r.RemoteAddr,
 			)
-			// Нельзя отправить ошибку — ответ уже начат
+			// Нельзя изменить статус — ответ уже начат
 		}
 	}
 }
