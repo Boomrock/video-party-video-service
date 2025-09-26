@@ -89,7 +89,6 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 		if end >= video.Size {
 			end = video.Size - 1
 		}
-		slog.Info(video.Size)
 
 		videoData, err := streamer.Seek(video, start, end)
 		if err != nil {
