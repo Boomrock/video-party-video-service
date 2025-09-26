@@ -78,7 +78,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 			// Парсим end
 			if parts[1] == "" {
 				// Если конец не указан — до конца файла
-				end = video.Size - 1
+				end = start + 3*1024*1024
 			} else {
 				end, err = strconv.ParseInt(parts[1], 10, 64)
 				if err != nil || end < start {
