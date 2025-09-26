@@ -15,6 +15,7 @@ import (
 
 	"log/slog" // <-- добавлен
 )
+
 func getFilenameWithoutExt(filePath string) string {
 	// 1. Получаем только имя файла (без пути)
 	filename := filepath.Base(filePath)
@@ -27,8 +28,9 @@ func getFilenameWithoutExt(filePath string) string {
 }
 
 const supExt string = ".mp4"
-//Метод загрузки видео на сервер
-//post?video
+
+// Метод загрузки видео на сервер
+// post?video
 func Upload(db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Получаем файл из формы
@@ -128,20 +130,42 @@ func Upload(db *database.DB) http.HandlerFunc {
 			"stored_filename", filename,
 			"size", handler.Size,
 		)
-		if ext != supExt{
+		if ext != supExt {
 			supportedFilePath := filepath.Join(config.UploadDir, supportedFileName)
 			err = utils.ConvertToMP4(filePath, supportedFilePath) // перевести в kafka или rabbitmq
-			if err != nil{
+			if err != nil {
 				slog.Error("Ошибка сохранения видео в базу данных",
-				"error", err,
-				"stored_filename", filename,
-				"original_filename", videoName,
-				"size", handler.Size,
+					"error", err,
+					"stored_filename", filename,
+					"original_filename", videoName,
+					"size", handler.Size,
 				)
-			// Опционально: удалить файл, если не удалось записать в БД
-			os.Remove(filePath) // Чистим мусор
-			os.Remove(supportedFilePath) // Чистим мусор
-			http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+				// Опционально: удалить файл, если не удалось записать в БД
+				os.Remove(filePath)          // Чистим мусор
+				os.Remove(supportedFilePath) // Чистим мусор
+				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+			}
+
+			info, err := os.Stat(supportedFilePath)
+			if err != nil {
+				slog.Error("Ошибка сохранения видео",
+					"error", err,
+					"stored_filename", filename,
+					"original_filename", videoName,
+				)
+				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+				return
+			}
+			err = db.UpdateVideoSize(supportedFileName, int(info.Size()))
+			if err != nil {
+				slog.Error("Ошибка сохранения видео",
+					"error", err,
+					"stored_filename", filename,
+					"original_filename", videoName,
+					"size", info.Size(),
+				)
+				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+				return
 			}
 		}
 		w.WriteHeader(http.StatusOK)

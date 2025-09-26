@@ -45,6 +45,15 @@ func (db *DB) InsertVideo(videoName, fileName string, size int) error {
 	fmt.Printf("Видео добавлено: '%s' -> '%s'\n", videoName, fileName)
 	return nil
 }
+func (db *DB) UpdateVideoSize(fileName string, size int) error {
+	updateSQL := `UPDATE videos SET size = ? WHERE file_name = ?`
+
+	_, err := db.conn.Exec(updateSQL, size, fileName)
+	if err != nil {
+		return fmt.Errorf("ошибка вставки обновления размера видео (video_name: '%s', file_name: '%d'): %w", fileName, size, err)
+	}
+	return nil
+}
 
 // GetAllVideos получает все записи из таблицы 'videos'.
 func (db *DB) GetAllVideos() ([]Video, error) {
