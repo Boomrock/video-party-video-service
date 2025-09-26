@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"video/config"
 	database "video/database"
 	"video/utils"
@@ -132,30 +133,31 @@ func Upload(db *database.DB) http.HandlerFunc {
 		)
 		if ext != supExt {
 			supportedFilePath := filepath.Join(config.UploadDir, supportedFileName)
-			err = utils.ConvertToMP4(filePath, supportedFilePath) // перевести в kafka или rabbitmq
-			if err != nil {
-				slog.Error("Ошибка сохранения видео в базу данных",
-					"error", err,
-					"stored_filename", filename,
-					"original_filename", videoName,
-					"size", handler.Size,
-				)
-				// Опционально: удалить файл, если не удалось записать в БД
-				os.Remove(filePath)          // Чистим мусор
-				os.Remove(supportedFilePath) // Чистим мусор
-				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+			done := make(chan error, 1)
+			tick := time.NewTicker(100 * time.Millisecond)
+			go startConvertVideo(filePath, supportedFilePath, done)
+			var info os.FileInfo
+			for { // подождем создания файла а потом говорим что все готово
+				select {
+				case err := <-done:
+					if err != nil {
+						slog.Error("Ошибка сохранения видео",
+							"error", err,
+							"stored_filename", filename,
+							"original_filename", videoName,
+						)
+						http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+					}
+					return
+				case <-tick.C:
+					//сморим раз 0.1 секунды как там у нас файл
+				}
+				info, err = os.Stat(supportedFilePath) // если файл создан говорим что его можно читать
+				if err == nil {
+					break
+				}
 			}
 
-			info, err := os.Stat(supportedFilePath)
-			if err != nil {
-				slog.Error("Ошибка сохранения видео",
-					"error", err,
-					"stored_filename", filename,
-					"original_filename", videoName,
-				)
-				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
-				return
-			}
 			err = db.UpdateVideoSize(supportedFileName, info.Size())
 			if err != nil {
 				slog.Error("Ошибка сохранения видео",
@@ -173,5 +175,14 @@ func Upload(db *database.DB) http.HandlerFunc {
 			"message":  "Видео успешно загружено",
 			"filename": filename,
 		})
+	}
+}
+
+func startConvertVideo(filePath, supportedFilePath string, done chan error) {
+	err := utils.ConvertToMP4(filePath, supportedFilePath)
+	done <- err
+	os.Remove(filePath)
+	if err != nil {
+		os.Remove(supportedFilePath)
 	}
 }
