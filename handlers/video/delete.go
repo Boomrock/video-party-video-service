@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
+	"video/config"
 	"video/database"
 
 	"log/slog"
@@ -65,7 +67,7 @@ func Delete(db *database.DB) http.HandlerFunc {
 		}
 
 		// Удаляем файл с диска
-		if err := os.Remove(video.FileName); err != nil {
+		if err := os.Remove(filepath.Join(config.UploadDir, video.FileName)); err != nil {
 			slog.Error("Не удалось удалить файл с диска",
 				"file_path", video.FileName,
 				"error", err,
