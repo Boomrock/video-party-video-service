@@ -8,12 +8,26 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"video/config"
 	database "video/database"
+	"video/utils"
 
 	"log/slog" // <-- добавлен
 )
-//Метод загрузки видео на сервер 
+func getFilenameWithoutExt(filePath string) string {
+	// 1. Получаем только имя файла (без пути)
+	filename := filepath.Base(filePath)
+
+	// 2. Удаляем расширение
+	ext := filepath.Ext(filename)
+	nameWithoutExt := strings.TrimSuffix(filename, ext)
+
+	return nameWithoutExt
+}
+
+const supExt string = ".mp4"
+//Метод загрузки видео на сервер
 //post?video
 func Upload(db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -30,10 +44,11 @@ func Upload(db *database.DB) http.HandlerFunc {
 			return
 		}
 		defer file.Close()
+		videoName := handler.Filename
 
 		// Логируем информацию о файле
 		slog.Info("Получен файл для загрузки",
-			"filename", handler.Filename,
+			"filename", videoName,
 			"size", handler.Size,
 			"content_type", handler.Header.Get("Content-Type"),
 			"remote_addr", r.RemoteAddr,
@@ -44,11 +59,11 @@ func Upload(db *database.DB) http.HandlerFunc {
 			".mp4": true, ".avi": true, ".mov": true,
 			".mkv": true, ".webm": true,
 		}
-		ext := filepath.Ext(handler.Filename)
+		ext := filepath.Ext(videoName)
 		if !allowedExtensions[ext] {
 			slog.Warn("Запрещённое расширение файла",
 				"extension", ext,
-				"filename", handler.Filename,
+				"filename", videoName,
 				"remote_addr", r.RemoteAddr,
 			)
 			http.Error(w, fmt.Sprintf("Тип файла %s не разрешён", ext), http.StatusBadRequest)
@@ -60,13 +75,13 @@ func Upload(db *database.DB) http.HandlerFunc {
 		if err != nil {
 			slog.Error("Не удалось сгенерировать имя файла",
 				"error", err,
-				"original_filename", handler.Filename,
+				"original_filename", videoName,
 			)
 			http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 			return
 		}
 		filename := uniqueName + ext
-
+		supportedFileName := uniqueName + supExt
 		// Создаём путь для сохранения
 		filePath := filepath.Join(config.UploadDir, filename)
 		dst, err := os.Create(filePath)
@@ -86,19 +101,19 @@ func Upload(db *database.DB) http.HandlerFunc {
 			slog.Error("Ошибка записи файла на диск",
 				"error", err,
 				"filename", filename,
-				"original_filename", handler.Filename,
+				"original_filename", videoName,
 			)
 			http.Error(w, "Ошибка записи файла", http.StatusInternalServerError)
 			return
 		}
 
 		// Сохраняем метаданные в БД
-		err = db.InsertVideo(handler.Filename, filename, int(handler.Size))
+		err = db.InsertVideo(videoName, supportedFileName, int(handler.Size)) // Мы сохраням другое расширение, так как нужно еще сконвертить это в поддерживамое расширение
 		if err != nil {
 			slog.Error("Ошибка сохранения видео в базу данных",
 				"error", err,
 				"stored_filename", filename,
-				"original_filename", handler.Filename,
+				"original_filename", videoName,
 				"size", handler.Size,
 			)
 			// Опционально: удалить файл, если не удалось записать в БД
@@ -109,11 +124,14 @@ func Upload(db *database.DB) http.HandlerFunc {
 
 		// Успешный ответ
 		slog.Info("Видео успешно загружено",
-			"original_filename", handler.Filename,
+			"original_filename", videoName,
 			"stored_filename", filename,
 			"size", handler.Size,
 		)
-
+		if ext != supExt{
+			filePath := filepath.Join(config.UploadDir, supportedFileName)
+			go utils.ConvertToMP4(filePath, filePath) // перевести в kafka или rabbitmq
+		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
 			"message":  "Видео успешно загружено",
