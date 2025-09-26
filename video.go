@@ -39,7 +39,7 @@ func main() {
 	router.Route("/video", func(r chi.Router) {
 		r.Get("/", video.Sender(&streamer, sqllite))
 		r.Get("/all", video.GetAllVideo(sqllite))
-		r.Get("/upload", video.Upload(sqllite))
+		r.Post("/upload", video.Upload(sqllite))
 		r.Get("/delete", video.Delete(sqllite))
 	})
 
