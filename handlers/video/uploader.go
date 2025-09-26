@@ -129,8 +129,20 @@ func Upload(db *database.DB) http.HandlerFunc {
 			"size", handler.Size,
 		)
 		if ext != supExt{
-			filePath := filepath.Join(config.UploadDir, supportedFileName)
-			go utils.ConvertToMP4(filePath, filePath) // перевести в kafka или rabbitmq
+			supportedFilePath := filepath.Join(config.UploadDir, supportedFileName)
+			err = utils.ConvertToMP4(filePath, supportedFilePath) // перевести в kafka или rabbitmq
+			if err != nil{
+				slog.Error("Ошибка сохранения видео в базу данных",
+				"error", err,
+				"stored_filename", filename,
+				"original_filename", videoName,
+				"size", handler.Size,
+				)
+			// Опционально: удалить файл, если не удалось записать в БД
+			os.Remove(filePath) // Чистим мусор
+			os.Remove(supportedFilePath) // Чистим мусор
+			http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
