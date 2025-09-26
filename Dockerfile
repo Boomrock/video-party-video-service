@@ -1,8 +1,14 @@
 # Stage 1: Сборка приложения
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
+
+RUN apk add --no-cache \
+    gcc \
+    g++ \
+    musl-dev\
+    ffmpeg
 
 # Копируем go.mod и go.sum для кэширования зависимостей
 COPY go.* ./
@@ -15,7 +21,7 @@ COPY . .
 
 # Собираем бинарник
 # Используем флаги для уменьшения размера бинарника и статической линковки
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN CGO_ENABLED=1 GOOS=linux go build \
     -a \
     -installsuffix cgo \
     -ldflags="-s -w" \
