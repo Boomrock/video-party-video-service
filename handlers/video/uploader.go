@@ -110,7 +110,7 @@ func Upload(db *database.DB) http.HandlerFunc {
 		}
 
 		// Сохраняем метаданные в БД
-		err = db.InsertVideo(videoName, supportedFileName, int(handler.Size)) // Мы сохраням другое расширение, так как нужно еще сконвертить это в поддерживамое расширение
+		err = db.InsertVideo(videoName, supportedFileName, handler.Size) // Мы сохраням другое расширение, так как нужно еще сконвертить это в поддерживамое расширение
 		if err != nil {
 			slog.Error("Ошибка сохранения видео в базу данных",
 				"error", err,
@@ -156,7 +156,7 @@ func Upload(db *database.DB) http.HandlerFunc {
 				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
 				return
 			}
-			err = db.UpdateVideoSize(supportedFileName, int(info.Size()))
+			err = db.UpdateVideoSize(supportedFileName, info.Size())
 			if err != nil {
 				slog.Error("Ошибка сохранения видео",
 					"error", err,

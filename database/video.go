@@ -7,51 +7,56 @@ import (
 
 // Video представляет структуру данных видео.
 type Video struct {
-	ID        int
+	ID        int    // ID обычно не превышает int
 	VideoName string // имя видео при внесении в систему
 	FileName  string // имя файла в системе
-	Size      int
+	Size      int64  // ✅ Размер в байтах — может быть >2 ГБ
 }
 
 // CreateVideosTable создает таблицу 'videos', если она еще не существует.
-// Таблица содержит поля:
-// - id (INTEGER PRIMARY KEY AUTOINCREMENT)
-// - video_name (TEXT NOT NULL)
-// - file_name (TEXT UNIQUE)
 func (db *DB) CreateVideosTable() error {
 	createTablesSQL := `
 	CREATE TABLE IF NOT EXISTS videos (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		video_name TEXT NOT NULL,
 		file_name TEXT UNIQUE, 
-		size INTEGER NOT NULL
+		size INTEGER NOT NULL  -- SQLite: INTEGER = 64-bit signed
 	);`
 	_, err := db.conn.Exec(createTablesSQL)
 	if err != nil {
-		return fmt.Errorf("ошибка создания таблиц: %w", err)
+		return fmt.Errorf("ошибка создания таблицы 'videos': %w", err)
 	}
 	fmt.Println("Таблица 'videos' готова.")
 	return nil
 }
 
 // InsertVideo добавляет новую запись видео в таблицу 'videos'.
-// fileName должен быть уникальным.
-func (db *DB) InsertVideo(videoName, fileName string, size int) error {
+func (db *DB) InsertVideo(videoName, fileName string, size int64) error {
 	insertSQL := `INSERT INTO videos (video_name, file_name, size) VALUES (?, ?, ?)`
 	_, err := db.conn.Exec(insertSQL, videoName, fileName, size)
 	if err != nil {
 		return fmt.Errorf("ошибка вставки видео (video_name: '%s', file_name: '%s'): %w", videoName, fileName, err)
 	}
-	fmt.Printf("Видео добавлено: '%s' -> '%s'\n", videoName, fileName)
+	fmt.Printf("Видео добавлено: '%s' -> '%s' (размер: %d байт)\n", videoName, fileName, size)
 	return nil
 }
-func (db *DB) UpdateVideoSize(fileName string, size int) error {
-	updateSQL := `UPDATE videos SET size = ? WHERE file_name = ?`
 
-	_, err := db.conn.Exec(updateSQL, size, fileName)
+// UpdateVideoSize обновляет размер видео по имени файла.
+func (db *DB) UpdateVideoSize(fileName string, size int64) error {
+	updateSQL := `UPDATE videos SET size = ? WHERE file_name = ?`
+	result, err := db.conn.Exec(updateSQL, size, fileName)
 	if err != nil {
-		return fmt.Errorf("ошибка вставки обновления размера видео (video_name: '%s', file_name: '%d'): %w", fileName, size, err)
+		return fmt.Errorf("ошибка обновления размера видео (file_name: '%s', size: %d): %w", fileName, size, err)
 	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("ошибка получения количества затронутых строк: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("видео с file_name '%s' не найдено для обновления размера", fileName)
+	}
+
 	return nil
 }
 
@@ -62,21 +67,18 @@ func (db *DB) GetAllVideos() ([]Video, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %w", err)
 	}
-	defer rows.Close() // Важно: закрыть rows
+	defer rows.Close()
 
 	var videos []Video
 	for rows.Next() {
 		var v Video
-		// Сканируем значения из строки результата в поля структуры
 		err := rows.Scan(&v.ID, &v.VideoName, &v.FileName, &v.Size)
 		if err != nil {
-			// Если ошибка при сканировании, прерываем и возвращаем ошибку
 			return nil, fmt.Errorf("ошибка сканирования строки: %w", err)
 		}
 		videos = append(videos, v)
 	}
 
-	// Проверяем, не произошла ли ошибка во время итерации по rows
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("ошибка итерации по строкам: %w", err)
 	}
@@ -85,7 +87,6 @@ func (db *DB) GetAllVideos() ([]Video, error) {
 }
 
 // GetVideoByID получает видео по его ID.
-// Возвращает указатель на Video и булево значение, указывающее, найдена ли запись.
 func (db *DB) GetVideoByID(id int) (*Video, error) {
 	querySQL := `SELECT id, video_name, file_name, size FROM videos WHERE id = ?`
 	row := db.conn.QueryRow(querySQL, id)
@@ -93,35 +94,28 @@ func (db *DB) GetVideoByID(id int) (*Video, error) {
 	var v Video
 	err := row.Scan(&v.ID, &v.VideoName, &v.FileName, &v.Size)
 	if err != nil {
-
-		return nil, fmt.Errorf("ошибка получения видео по ID: %w", err)
+		return nil, fmt.Errorf("ошибка получения видео по ID %d: %w", id, err)
 	}
 
-	// Видео найдено
 	return &v, nil
 }
 
 // GetVideoByFileName получает видео по его file_name.
-// Возвращает указатель на Video и булево значение, указывающее, найдена ли запись.
-func (db *DB) GetVideoByFileName(videoName string) (*Video, error) {
+func (db *DB) GetVideoByFileName(fileName string) (*Video, error) {
 	querySQL := `SELECT id, video_name, file_name, size FROM videos WHERE file_name = ?`
-	row := db.conn.QueryRow(querySQL, videoName)
+	row := db.conn.QueryRow(querySQL, fileName)
 
 	var v Video
 	err := row.Scan(&v.ID, &v.VideoName, &v.FileName, &v.Size)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка получения видео по file_name: %w", err)
+		return nil, fmt.Errorf("ошибка получения видео по file_name '%s': %w", fileName, err)
 	}
 
-	// Видео найдено
 	return &v, nil
 }
 
-// UpdateVideo обновляет video_name и/или file_name видео по его ID.
-// Пустая строка в новом значении означает, что поле не нужно обновлять.
-// Если новое file_name не уникально, будет возвращена ошибка.
-func (db *DB) UpdateVideo(id int, newVideoName, newFileName string, size int) error {
-	// Строим динамический SQL-запрос
+// UpdateVideo обновляет video_name, file_name и/или size видео по ID.
+func (db *DB) UpdateVideo(id int, newVideoName, newFileName string, size int64) error {
 	var updates []string
 	var args []interface{}
 
@@ -134,25 +128,22 @@ func (db *DB) UpdateVideo(id int, newVideoName, newFileName string, size int) er
 		args = append(args, newFileName)
 	}
 
+	// Всегда обновляем size, если передан (можно сделать условно)
 	updates = append(updates, "size = ?")
 	args = append(args, size)
 
-	// Если ничего не изменилось, просто выходим
 	if len(updates) == 1 {
 		fmt.Printf("Нет данных для обновления видео с ID %d.\n", id)
 		return nil
 	}
 
-	// Добавляем ID в аргументы для WHERE
 	args = append(args, id)
-
 	querySQL := fmt.Sprintf("UPDATE videos SET %s WHERE id = ?", strings.Join(updates, ", "))
 	result, err := db.conn.Exec(querySQL, args...)
 	if err != nil {
 		return fmt.Errorf("ошибка обновления видео с ID %d: %w", id, err)
 	}
 
-	// Проверяем, была ли затронута хотя бы одна строка
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("ошибка получения количества затронутых строк: %w", err)
@@ -173,7 +164,6 @@ func (db *DB) DeleteVideoByID(id int) error {
 		return fmt.Errorf("ошибка удаления видео: %w", err)
 	}
 
-	// Проверяем, была ли затронута хотя бы одна строка
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("ошибка получения количества затронутых строк: %w", err)
@@ -194,7 +184,6 @@ func (db *DB) DeleteVideoByFileName(fileName string) error {
 		return fmt.Errorf("ошибка удаления видео по file_name: %w", err)
 	}
 
-	// Проверяем, была ли затронута хотя бы одна строка
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("ошибка получения количества затронутых строк: %w", err)
