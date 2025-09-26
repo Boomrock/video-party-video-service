@@ -37,9 +37,9 @@ func Delete(db *database.DB) http.HandlerFunc {
 			http.Error(w, "Video not found in database", http.StatusNotFound)
 			return
 		}
-
+		filePath := filepath.Join(config.UploadDir, video.FileName)
 		// Проверяем наличие файла на диске
-		if _, err := os.Stat(video.FileName); os.IsNotExist(err) {
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			slog.Warn("Файл видео отсутствует на диске — удаляем только из БД",
 				"video_name", videoName,
 				"file_path", video.FileName,
@@ -67,7 +67,7 @@ func Delete(db *database.DB) http.HandlerFunc {
 		}
 
 		// Удаляем файл с диска
-		if err := os.Remove(filepath.Join(config.UploadDir, video.FileName)); err != nil {
+		if err := os.Remove(filePath); err != nil {
 			slog.Error("Не удалось удалить файл с диска",
 				"file_path", video.FileName,
 				"error", err,
