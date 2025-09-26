@@ -38,7 +38,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 
 		rangeHeader := r.Header.Get("Range")
 		var start, end int64
-
+		fmt.Println(rangeHeader)
 		if rangeHeader == "" {
 			// По умолчанию — первые 1 МБ
 			start = 0
@@ -112,6 +112,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 
 		// ✅ Устанавливаем правильные заголовки
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, video.Size))
+		fmt.Println(start, end)
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("Content-Length", strconv.Itoa(len(videoData)))
 		w.Header().Set("Content-Type", "video/mp4")
