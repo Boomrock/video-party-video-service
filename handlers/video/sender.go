@@ -75,22 +75,8 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 				return
 			}
 
-			// Парсим end
-			if parts[1] == "" {
-				// Если конец не указан — до конца файла
-				end = start + 3*1024*1024
-			} else {
-				end, err = strconv.ParseInt(parts[1], 10, 64)
-				if err != nil || end < start {
-					slog.Error("Некорректный конечный байт в заголовке Range",
-						"диапазон", rangeHeader,
-						"ошибка", err,
-						"удалённый_адрес", r.RemoteAddr,
-					)
-					http.Error(w, "Invalid end byte", http.StatusBadRequest)
-					return
-				}
-			}
+			end = start + 5*1024*1024
+
 		}
 
 		// 🔒 Проверка: start за пределами файла → 416
