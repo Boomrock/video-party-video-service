@@ -3,8 +3,11 @@ package video
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path"
 	"strconv"
 	"strings"
+	"video/config"
 	"video/database"
 	"video/streamer"
 
@@ -78,14 +81,23 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 			end = start + 5*1024*1024
 
 		}
-
+		fileInfo, err := os.Stat(path.Join(config.UploadDir, video.FileName))
+		if err != nil {
+			slog.Error("Отсутствует файл",
+				"диапазон", rangeHeader,
+				"удалённый_адрес", r.RemoteAddr,
+			)
+			http.Error(w, "Missing video", http.StatusNotFound)
+			return
+		}
+		videoSize := fileInfo.Size()
 		// 🔒 Проверка: start за пределами файла → 416
-		if start >= video.Size {
-			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", video.Size))
+		if start >= videoSize {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", videoSize))
 			slog.Warn("Запрошенный диапазон вне размера видео",
 				"имя_видео", videoName,
 				"start", start,
-				"size", video.Size,
+				"size", videoSize,
 				"удалённый_адрес", r.RemoteAddr,
 			)
 			http.Error(w, "Requested range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
@@ -93,8 +105,8 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 		}
 
 		// 🔒 Обрезаем end по размеру файла
-		if end >= video.Size {
-			end = video.Size - 1
+		if end >= videoSize {
+			end = videoSize - 1
 		}
 
 		// Теперь безопасно читаем
@@ -111,7 +123,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 		}
 
 		// ✅ Устанавливаем правильные заголовки
-		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, video.Size))
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, videoSize))
 		fmt.Println(start, end)
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("Content-Length", strconv.Itoa(len(videoData)))
