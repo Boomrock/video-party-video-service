@@ -77,7 +77,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 				http.Error(w, "Invalid start byte", http.StatusBadRequest)
 				return
 			}
-			end = start + 40*1024*1024
+			end = start + 20*1024*1024
 
 
 		}
