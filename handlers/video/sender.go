@@ -77,7 +77,7 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 				http.Error(w, "Invalid start byte", http.StatusBadRequest)
 				return
 			}
-			if(parts[1] != ""){
+			if parts[1] != "" {
 				end, err = strconv.ParseInt(parts[1], 10, 64)
 				if err != nil || start < 0 {
 					slog.Error("Некорректный конечный байт в заголовке Range",
@@ -88,12 +88,11 @@ func Sender(streamer streamer.Streamer, database *database.DB) http.HandlerFunc 
 					http.Error(w, "Invalid start byte", http.StatusBadRequest)
 					return
 				}
-				if(end - start > 20*1024*1024){
-					end = start + 20*1024*1024
+				if end-start > 5*1024*1024 {
+					end = start + 5*1024*1024
 				}
-			} else
-			{
-				end = start + 20*1024*1024
+			} else {
+				end = start + 5*1024*1024
 			}
 		}
 		fileInfo, err := os.Stat(path.Join(config.UploadDir, video.FileName))
