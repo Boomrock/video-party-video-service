@@ -11,6 +11,8 @@ type Video struct {
 	VideoName string // имя видео при внесении в систему
 	FileName  string // имя файла в системе
 	Size      int64  // ✅ Размер в байтах — может быть >2 ГБ
+	HLSConverted bool // признак, что видео уже преобразовано в HLS
+	HLSErrorMessage string
 }
 
 // CreateVideosTable создает таблицу 'videos', если она еще не существует.
@@ -20,7 +22,9 @@ func (db *DB) CreateVideosTable() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		video_name TEXT NOT NULL,
 		file_name TEXT UNIQUE, 
-		size INTEGER NOT NULL  -- SQLite: INTEGER = 64-bit signed
+		size INTEGER NOT NULL,  -- SQLite: INTEGER = 64-bit signed
+		hls_converted BOOLEAN DEFAULT FALSE,
+		hls_error_message TEXT
 	);`
 	_, err := db.conn.Exec(createTablesSQL)
 	if err != nil {
@@ -194,4 +198,10 @@ func (db *DB) DeleteVideoByFileName(fileName string) error {
 
 	fmt.Printf("Видео с file_name '%s' удалено.\n", fileName)
 	return nil
+}
+
+
+func (db *DB) UpdateHLSConversionStatus(mp4FileName string, converted bool, errorMessage string) error {
+	_, err := db.conn.Exec("UPDATE videos SET hls_converted = ?, hls_error_message = ? WHERE file_name = ?", converted, errorMessage, mp4FileName)
+    return err
 }
