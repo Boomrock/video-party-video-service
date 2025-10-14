@@ -18,9 +18,9 @@ type VideoStorage interface {
 
 // Video представляет структуру данных видео.
 type Video struct {
-	ID                int    // Уникальный идентификатор
-	VideoName         string // Имя видео, заданное пользователем
-	FileName          string // Имя файла в системе
+	ID        int    // Уникальный идентификатор
+	VideoName string // Имя видео, заданное пользователем
+	FileName  string // Имя файла в системе
 
 }
 
@@ -30,7 +30,7 @@ func (db *DB) CreateVideosTable() error {
 	CREATE TABLE IF NOT EXISTS videos (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		video_name TEXT NOT NULL,
-		file_name TEXT UNIQUE,
+		file_name TEXT UNIQUE
 	);`
 	_, err := db.conn.Exec(createTablesSQL)
 	if err != nil {
