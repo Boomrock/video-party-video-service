@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"video/config"
 	database "video/database"
 	"video/utils"
@@ -17,22 +16,10 @@ import (
 	"log/slog" // <-- добавлен
 )
 
-func getFilenameWithoutExt(filePath string) string {
-	// 1. Получаем только имя файла (без пути)
-	filename := filepath.Base(filePath)
-
-	// 2. Удаляем расширение
-	ext := filepath.Ext(filename)
-	nameWithoutExt := strings.TrimSuffix(filename, ext)
-
-	return nameWithoutExt
-}
-
-const supExt string = ".mp4"
 
 // Метод загрузки видео на сервер
 // post?video
-func Upload(db *database.DB) http.HandlerFunc {
+func Upload(videoStorage database.VideoStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Получаем файл из формы
 		file, handler, err := r.FormFile("video")
@@ -60,7 +47,7 @@ func Upload(db *database.DB) http.HandlerFunc {
 		// Валидация расширения
 		allowedExtensions := map[string]bool{
 			".mp4": true, ".avi": true, ".mov": true,
-			".mkv": true, ".webm": true, 
+			".mkv": true, ".webm": true,
 		}
 		ext := filepath.Ext(videoName)
 		if !allowedExtensions[ext] {
@@ -84,9 +71,7 @@ func Upload(db *database.DB) http.HandlerFunc {
 			return
 		}
 		filename := uniqueName + ext
-		supportedFileName := uniqueName + supExt
-		// Создаём путь для сохранения
-		filePath := filepath.Join(config.UploadDir, filename)
+		filePath := filepath.Join(config.TemporaryDir, filename)
 		dst, err := os.Create(filePath)
 		if err != nil {
 			slog.Error("Ошибка создания файла на сервере",
@@ -110,89 +95,35 @@ func Upload(db *database.DB) http.HandlerFunc {
 			return
 		}
 
-		// Сохраняем метаданные в БД
-		err = db.InsertVideo(videoName, supportedFileName, handler.Size) // Мы сохраням другое расширение, так как нужно еще сконвертить это в поддерживамое расширение
-		if err != nil {
-			slog.Error("Ошибка сохранения видео в базу данных",
-				"error", err,
-				"stored_filename", filename,
-				"original_filename", videoName,
-				"size", handler.Size,
-			)
-			// Опционально: удалить файл, если не удалось записать в БД
-			os.Remove(filePath) // Чистим мусор
-			http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
-			return
-		}
-
 		// Успешный ответ
 		slog.Info("Видео успешно загружено",
 			"original_filename", videoName,
 			"stored_filename", filename,
 			"size", handler.Size,
 		)
-		if ext != supExt {
-			supportedFilePath := filepath.Join(config.UploadDir, supportedFileName)
-			done := make(chan error, 1)
-			tick := time.NewTicker(100 * time.Millisecond)
-			go startConvertVideo(filePath, supportedFilePath, done)
-			var info os.FileInfo
-			for { // подождем создания файла а потом говорим что все готово
-				select {
-				case err := <-done:
-					if err != nil {
-						slog.Error("Ошибка сохранения видео",
-							"error", err,
-							"stored_filename", filename,
-							"original_filename", videoName,
-						)
-						http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
-					}
-					return
-				case <-tick.C:
-					//сморим раз 0.1 секунды как там у нас файл
-				}
-				info, err = os.Stat(supportedFilePath) // если файл создан говорим что его можно читать
-				if err == nil {
-					break
-				}
-			}
 
-			err = db.UpdateVideoSize(supportedFileName, info.Size())
-			if err != nil {
-				slog.Error("Ошибка сохранения видео",
-					"error", err,
-					"stored_filename", filename,
-					"original_filename", videoName,
-					"size", info.Size(),
-				)
-				http.Error(w, "Ошибка сохранения данных", http.StatusInternalServerError)
-				return
-			}
-		}
-
-
-		go func(mp4FileName string) {
-			slog.Info("Запускается фоновая конвертация в HLS", "filename", mp4FileName)
-			hlsErr := utils.GenerateAdaptiveHLS(mp4FileName)
+		videoStorage.InsertVideo(videoName, uniqueName)
+		go func(filename string) {
+			slog.Info("Запускается фоновая конвертация в HLS", "filename", filename)
+			hlsErr := utils.GenerateAdaptiveHLS(config.TemporaryDir, config.UploadDir, filename)
 			if hlsErr != nil {
 				slog.Error("Ошибка конвертации MP4 в HLS",
 					"error", hlsErr,
-					"mp4_filename", mp4FileName,
+					"mp4_filename", filename,
 				)
-				
-				db.UpdateHLSConversionStatus(mp4FileName, false, hlsErr.Error()) 
-			} else {
-				slog.Info("HLS конвертация завершена успешно", "mp4_filename", mp4FileName)
-				db.UpdateHLSConversionStatus(mp4FileName, true, "") 
-			}
-		}(filename)
+				videoStorage.DeleteVideoByFileName(uniqueName)
 
+			} else {
+				slog.Info("HLS конвертация завершена успешно", "mp4_filename", filename)
+			}
+			os.Remove(filePath)
+
+		}(filename)
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
-			"message":          "Видео успешно загружено и начинается обработка.",
-			"filename_for_hls": strings.TrimSuffix(filename, filepath.Ext(filename)), 
+			"message":           "Видео успешно загружено и начинается обработка.",
+			"filename_for_hls":  strings.TrimSuffix(filename, filepath.Ext(filename)),
 			"original_filename": videoName,
 		})
 
@@ -207,9 +138,3 @@ func startConvertVideo(filePath, supportedFilePath string, done chan error) {
 		os.Remove(supportedFilePath)
 	}
 }
-
-// func HLSGenerate(originalMP4FileName string, done chan error) {
-// 	if err := utils.GenerateAdaptiveHLS(originalMP4FileName); err != nil {
-// 		done <- err
-// 	}
-// }

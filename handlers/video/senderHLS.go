@@ -16,9 +16,7 @@ func HLSHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Отрезаем префикс "/hls/"
 		relativePath := strings.TrimPrefix(r.URL.Path, "/hls/")
-		// fmt.Println("Debug:", relativePath)
-		// fmt.Println("Debug:", r.URL.Path)
-		// fmt.Println("Debug:",r.URL.RawQuery)
+
 
 		if relativePath == r.URL.Path { // Если префикс не был найден, значит путь неверный
 			slog.Error("Неверный HLS-путь, URL не начинается с /hls/",

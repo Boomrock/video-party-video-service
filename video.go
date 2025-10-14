@@ -41,10 +41,7 @@ func main() {
 		r.Get("/all", video.GetAllVideo(sqllite))
 		r.Post("/upload", video.Upload(sqllite))
 		r.Get("/delete", video.Delete(sqllite))
-	})
-
-	router.Route("/hls", func (r chi.Router) {
-		r.Get("/*", video.HLSHandler())
+		r.Get("/hls", video.HLSHandler())
 
 	})
 

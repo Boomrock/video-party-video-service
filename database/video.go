@@ -5,14 +5,23 @@ import (
 	"strings"
 )
 
+// VideoStorage определяет контракт для работы с хранилищем видео.
+type VideoStorage interface {
+	InsertVideo(videoName, fileName string) error
+	GetAllVideos() ([]Video, error)
+	GetVideoByID(id int) (*Video, error)
+	GetVideoByFileName(fileName string) (*Video, error)
+	UpdateVideo(id int, newVideoName, newFileName string) error
+	DeleteVideoByID(id int) error
+	DeleteVideoByFileName(fileName string) error
+}
+
 // Video представляет структуру данных видео.
 type Video struct {
-	ID        int    // ID обычно не превышает int
-	VideoName string // имя видео при внесении в систему
-	FileName  string // имя файла в системе
-	Size      int64  // ✅ Размер в байтах — может быть >2 ГБ
-	HLSConverted bool // признак, что видео уже преобразовано в HLS
-	HLSErrorMessage string
+	ID                int    // Уникальный идентификатор
+	VideoName         string // Имя видео, заданное пользователем
+	FileName          string // Имя файла в системе
+
 }
 
 // CreateVideosTable создает таблицу 'videos', если она еще не существует.
@@ -21,10 +30,7 @@ func (db *DB) CreateVideosTable() error {
 	CREATE TABLE IF NOT EXISTS videos (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		video_name TEXT NOT NULL,
-		file_name TEXT UNIQUE, 
-		size INTEGER NOT NULL,  -- SQLite: INTEGER = 64-bit signed
-		hls_converted BOOLEAN DEFAULT FALSE,
-		hls_error_message TEXT
+		file_name TEXT UNIQUE,
 	);`
 	_, err := db.conn.Exec(createTablesSQL)
 	if err != nil {
@@ -35,38 +41,19 @@ func (db *DB) CreateVideosTable() error {
 }
 
 // InsertVideo добавляет новую запись видео в таблицу 'videos'.
-func (db *DB) InsertVideo(videoName, fileName string, size int64) error {
-	insertSQL := `INSERT INTO videos (video_name, file_name, size) VALUES (?, ?, ?)`
-	_, err := db.conn.Exec(insertSQL, videoName, fileName, size)
+func (db *DB) InsertVideo(videoName, fileName string) error {
+	insertSQL := `INSERT INTO videos (video_name, file_name) VALUES (?, ?)`
+	_, err := db.conn.Exec(insertSQL, videoName, fileName)
 	if err != nil {
 		return fmt.Errorf("ошибка вставки видео (video_name: '%s', file_name: '%s'): %w", videoName, fileName, err)
 	}
-	fmt.Printf("Видео добавлено: '%s' -> '%s' (размер: %d байт)\n", videoName, fileName, size)
-	return nil
-}
-
-// UpdateVideoSize обновляет размер видео по имени файла.
-func (db *DB) UpdateVideoSize(fileName string, size int64) error {
-	updateSQL := `UPDATE videos SET size = ? WHERE file_name = ?`
-	result, err := db.conn.Exec(updateSQL, size, fileName)
-	if err != nil {
-		return fmt.Errorf("ошибка обновления размера видео (file_name: '%s', size: %d): %w", fileName, size, err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("ошибка получения количества затронутых строк: %w", err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("видео с file_name '%s' не найдено для обновления размера", fileName)
-	}
-
+	fmt.Printf("Видео добавлено: '%s' -> '%s'\n", videoName, fileName)
 	return nil
 }
 
 // GetAllVideos получает все записи из таблицы 'videos'.
 func (db *DB) GetAllVideos() ([]Video, error) {
-	querySQL := `SELECT id, video_name, file_name, size FROM videos`
+	querySQL := `SELECT id, video_name, file_name FROM videos`
 	rows, err := db.conn.Query(querySQL)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %w", err)
@@ -76,7 +63,7 @@ func (db *DB) GetAllVideos() ([]Video, error) {
 	var videos []Video
 	for rows.Next() {
 		var v Video
-		err := rows.Scan(&v.ID, &v.VideoName, &v.FileName, &v.Size)
+		err := rows.Scan(&v.ID, &v.VideoName, &v.FileName)
 		if err != nil {
 			return nil, fmt.Errorf("ошибка сканирования строки: %w", err)
 		}
@@ -92,11 +79,11 @@ func (db *DB) GetAllVideos() ([]Video, error) {
 
 // GetVideoByID получает видео по его ID.
 func (db *DB) GetVideoByID(id int) (*Video, error) {
-	querySQL := `SELECT id, video_name, file_name, size FROM videos WHERE id = ?`
+	querySQL := `SELECT id, video_name, file_name FROM videos WHERE id = ?`
 	row := db.conn.QueryRow(querySQL, id)
 
 	var v Video
-	err := row.Scan(&v.ID, &v.VideoName, &v.FileName, &v.Size)
+	err := row.Scan(&v.ID, &v.VideoName, &v.FileName)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка получения видео по ID %d: %w", id, err)
 	}
@@ -106,11 +93,11 @@ func (db *DB) GetVideoByID(id int) (*Video, error) {
 
 // GetVideoByFileName получает видео по его file_name.
 func (db *DB) GetVideoByFileName(fileName string) (*Video, error) {
-	querySQL := `SELECT id, video_name, file_name, size FROM videos WHERE file_name = ?`
+	querySQL := `SELECT id, video_name, file_name, hls_converted, hls_error_message FROM videos WHERE file_name = ?`
 	row := db.conn.QueryRow(querySQL, fileName)
 
 	var v Video
-	err := row.Scan(&v.ID, &v.VideoName, &v.FileName, &v.Size)
+	err := row.Scan(&v.ID, &v.VideoName, &v.FileName)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка получения видео по file_name '%s': %w", fileName, err)
 	}
@@ -118,8 +105,8 @@ func (db *DB) GetVideoByFileName(fileName string) (*Video, error) {
 	return &v, nil
 }
 
-// UpdateVideo обновляет video_name, file_name и/или size видео по ID.
-func (db *DB) UpdateVideo(id int, newVideoName, newFileName string, size int64) error {
+// UpdateVideo обновляет video_name и/или file_name видео по ID.
+func (db *DB) UpdateVideo(id int, newVideoName, newFileName string) error {
 	var updates []string
 	var args []interface{}
 
@@ -132,11 +119,7 @@ func (db *DB) UpdateVideo(id int, newVideoName, newFileName string, size int64) 
 		args = append(args, newFileName)
 	}
 
-	// Всегда обновляем size, если передан (можно сделать условно)
-	updates = append(updates, "size = ?")
-	args = append(args, size)
-
-	if len(updates) == 1 {
+	if len(updates) == 0 {
 		fmt.Printf("Нет данных для обновления видео с ID %d.\n", id)
 		return nil
 	}
@@ -200,8 +183,11 @@ func (db *DB) DeleteVideoByFileName(fileName string) error {
 	return nil
 }
 
-
+// UpdateHLSConversionStatus обновляет статус конвертации HLS и сообщение об ошибке.
 func (db *DB) UpdateHLSConversionStatus(mp4FileName string, converted bool, errorMessage string) error {
-	_, err := db.conn.Exec("UPDATE videos SET hls_converted = ?, hls_error_message = ? WHERE file_name = ?", converted, errorMessage, mp4FileName)
-    return err
+	_, err := db.conn.Exec(
+		"UPDATE videos SET hls_converted = ?, hls_error_message = ? WHERE file_name = ?",
+		converted, errorMessage, mp4FileName,
+	)
+	return err
 }
