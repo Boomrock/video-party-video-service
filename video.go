@@ -41,8 +41,7 @@ func main() {
 		r.Get("/all", video.GetAllVideo(sqllite))
 		r.Post("/upload", video.Upload(sqllite))
 		r.Get("/delete", video.Delete(sqllite))
-		r.Get("/hls", video.HLSHandler())
-
+		r.Get("/hls/*", video.HLSHandler())
 	})
 
 	fmt.Println("Сервер запущен на http://localhost:3030")
