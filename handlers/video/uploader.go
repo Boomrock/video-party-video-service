@@ -60,7 +60,7 @@ func Upload(db *database.DB) http.HandlerFunc {
 		// Валидация расширения
 		allowedExtensions := map[string]bool{
 			".mp4": true, ".avi": true, ".mov": true,
-			".mkv": true, ".webm": true,
+			".mkv": true, ".webm": true, 
 		}
 		ext := filepath.Ext(videoName)
 		if !allowedExtensions[ext] {
@@ -170,11 +170,32 @@ func Upload(db *database.DB) http.HandlerFunc {
 				return
 			}
 		}
+
+
+		go func(mp4FileName string) {
+			slog.Info("Запускается фоновая конвертация в HLS", "filename", mp4FileName)
+			hlsErr := utils.GenerateAdaptiveHLS(mp4FileName)
+			if hlsErr != nil {
+				slog.Error("Ошибка конвертации MP4 в HLS",
+					"error", hlsErr,
+					"mp4_filename", mp4FileName,
+				)
+				
+				db.UpdateHLSConversionStatus(mp4FileName, false, hlsErr.Error()) 
+			} else {
+				slog.Info("HLS конвертация завершена успешно", "mp4_filename", mp4FileName)
+				db.UpdateHLSConversionStatus(mp4FileName, true, "") 
+			}
+		}(filename)
+
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
-			"message":  "Видео успешно загружено",
-			"filename": filename,
+			"message":          "Видео успешно загружено и начинается обработка.",
+			"filename_for_hls": strings.TrimSuffix(filename, filepath.Ext(filename)), 
+			"original_filename": videoName,
 		})
+
 	}
 }
 
@@ -186,3 +207,9 @@ func startConvertVideo(filePath, supportedFilePath string, done chan error) {
 		os.Remove(supportedFilePath)
 	}
 }
+
+// func HLSGenerate(originalMP4FileName string, done chan error) {
+// 	if err := utils.GenerateAdaptiveHLS(originalMP4FileName); err != nil {
+// 		done <- err
+// 	}
+// }

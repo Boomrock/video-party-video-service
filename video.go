@@ -43,6 +43,11 @@ func main() {
 		r.Get("/delete", video.Delete(sqllite))
 	})
 
-	fmt.Println("Сервер запущен на http://localhost:8080")
-	http.ListenAndServe(":8080", router)
+	router.Route("/hls", func (r chi.Router) {
+		r.Get("/*", video.HLSHandler())
+
+	})
+
+	fmt.Println("Сервер запущен на http://localhost:3030")
+	http.ListenAndServe(":3030", router)
 }
