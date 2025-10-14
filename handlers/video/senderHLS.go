@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"video/config"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // HLSHandler обслуживает HLS-файлы (манифесты .m3u8 и сегменты .ts).
@@ -15,18 +17,16 @@ import (
 func HLSHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Отрезаем префикс "/hls/"
-		relativePath := strings.TrimPrefix(r.URL.Path, "/hls/")
+		relativePath := chi.URLParam(r, "*")
 
-
-		if relativePath == r.URL.Path { // Если префикс не был найден, значит путь неверный
-			slog.Error("Неверный HLS-путь, URL не начинается с /hls/",
+		if relativePath == "" { // Если префикс не был найден, значит путь неверный
+			slog.Error("путь не может быть пустым",
 				"удалённый_адрес", r.RemoteAddr,
 				"полный_путь_URL", r.URL.Path,
 			)
 			http.Error(w, "Invalid HLS path", http.StatusBadRequest)
 			return
 		}
-
 
 		// Можно извлечь video_id, если нужно для логирования или дополнительной проверки
 		parts := strings.Split(relativePath, "/")
@@ -43,12 +43,10 @@ func HLSHandler() http.HandlerFunc {
 
 		// fmt.Println("Debug: videoID:", videoID, "fileName:", fileName)
 
-
 		// filepath.Join автоматически обработает config.UploadDir/videoID/fileName
 		filePath := filepath.Join(config.UploadDir, relativePath)
 		// fmt.Println("Debug: filePath:", filePath)
 
-		
 		fileInfo, err := os.Stat(filePath)
 		if os.IsNotExist(err) {
 			slog.Warn("HLS файл не найден",
