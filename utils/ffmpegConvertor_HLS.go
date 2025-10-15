@@ -47,10 +47,11 @@ func generateSingleQualityHLS(
 		"-c:a", "aac",
 		"-b:a", audioBitrate,
 		"-f", "hls",
+		"-hls_list_size", "0",
+		"-hls_flags", "temp_file",
 		"-hls_time", strconv.Itoa(segmentDuration),
 		"-hls_playlist_type", playlistType,
 		"-hls_segment_filename", filepath.Join(outputPathDir, fmt.Sprintf("%s_%%03d.ts", outputBaseName)),
-		
 		outputPlaylistPath,
 	}
 
@@ -99,7 +100,7 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 	}
 
 	segmentDuration := 10 // Длительность каждого сегмента в секундах
-	playlistType := "vod" // Тип плейлиста: "vod" (Video On Demand)
+	playlistType := "event" // Тип плейлиста: "vod" (Video On Demand)
 
 	var generatedPlaylists []HLSQuality
 	err := func() error{
