@@ -67,7 +67,7 @@ func Delete(db *database.DB) http.HandlerFunc {
 		}
 
 		// Удаляем файл с диска
-		if err := os.Remove(filePath); err != nil {
+		if err := os.RemoveAll(filePath); err != nil {
 			slog.Error("Не удалось удалить файл с диска",
 				"file_path", video.FileName,
 				"error", err,
