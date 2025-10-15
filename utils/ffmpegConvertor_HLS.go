@@ -50,6 +50,7 @@ func generateSingleQualityHLS(
 		"-hls_time", strconv.Itoa(segmentDuration),
 		"-hls_playlist_type", playlistType,
 		"-hls_segment_filename", filepath.Join(outputPathDir, fmt.Sprintf("%s_%%03d.ts", outputBaseName)),
+		
 		outputPlaylistPath,
 	}
 
@@ -93,7 +94,7 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 	// 2. Определяем конфигурации для разных качеств (можно вынести в config)
 	qualities := []HLSQuality{
 		{Resolution: "854x480", VideoBitrate: "1M", AudioBitrate: "96k", BaseName: "480p", Bandwidth: 1100000},
-		{Resolution: "1280x720", VideoBitrate: "2M", AudioBitrate: "128k", BaseName: "720p", Bandwidth: 2150000},
+		//{Resolution: "1280x720", VideoBitrate: "2M", AudioBitrate: "128k", BaseName: "720p", Bandwidth: 2150000},
 		//{Resolution: "1920x1080", VideoBitrate: "4M", AudioBitrate: "192k", BaseName: "1080p", Bandwidth: 4250000},
 	}
 
