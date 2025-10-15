@@ -42,7 +42,7 @@ func generateSingleQualityHLS(
 		"-i", inputPath,
 		"-c:v", "libx264",
 		"-b:v", videoBitrate,
-		"-preset", "ultrafast",
+		"-preset", "medium",
 		"-vf", fmt.Sprintf("scale=%s", resolution),
 		"-c:a", "aac",
 		"-b:a", audioBitrate,
@@ -50,9 +50,9 @@ func generateSingleQualityHLS(
 		"-hls_time", strconv.Itoa(segmentDuration),
 		"-hls_playlist_type", playlistType,
 		"-hls_segment_filename", filepath.Join(outputPathDir, fmt.Sprintf("%s_%%03d.ts", outputBaseName)),
-		"-movflags", "+faststart",
 		outputPlaylistPath,
 	}
+
 
 	cmd := exec.Command("ffmpeg", args...)
 
@@ -71,10 +71,10 @@ func generateSingleQualityHLS(
 func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) error {
 	// Имя папки для HLS-файлов будет именем файла без расширения
 	videoFolderName := strings.TrimSuffix(originalFileName, filepath.Ext(originalFileName))
-
+	
 	// Полный путь к оригинальному  файлу
 	inputPath := filepath.Join(inputFolder, originalFileName)
-
+	
 	// Общая директория для всех HLS файлов этого видео
 	outputPathDir := filepath.Join(outputFoler, videoFolderName)
 
@@ -93,54 +93,15 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 	// 2. Определяем конфигурации для разных качеств (можно вынести в config)
 	qualities := []HLSQuality{
 		{Resolution: "854x480", VideoBitrate: "1M", AudioBitrate: "96k", BaseName: "480p", Bandwidth: 1100000},
-		//{Resolution: "1280x720", VideoBitrate: "2M", AudioBitrate: "128k", BaseName: "720p", Bandwidth: 2150000},
+		{Resolution: "1280x720", VideoBitrate: "2M", AudioBitrate: "128k", BaseName: "720p", Bandwidth: 2150000},
 		//{Resolution: "1920x1080", VideoBitrate: "4M", AudioBitrate: "192k", BaseName: "1080p", Bandwidth: 4250000},
 	}
 
-	segmentDuration := 10   // Длительность каждого сегмента в секундах
-	playlistType := "event" // Тип плейлиста: "vod" (Video On Demand)
+	segmentDuration := 10 // Длительность каждого сегмента в секундах
+	playlistType := "vod" // Тип плейлиста: "vod" (Video On Demand)
 
 	var generatedPlaylists []HLSQuality
-	err := func() error {
-		// 4. Создаем мастер-плейлист
-		masterPlaylistPath := filepath.Join(outputPathDir, "main.m3u8")
-		masterPlaylistFile, err := os.Create(masterPlaylistPath)
-		if err != nil {
-			return fmt.Errorf("не удалось создать мастер-плейлист %s: %w", masterPlaylistPath, err)
-		}
-
-		_, err = fmt.Fprintf(masterPlaylistFile, "#EXTM3U\n")
-		if err != nil {
-			return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
-		}
-		_, err = fmt.Fprintf(masterPlaylistFile, "#EXT-X-VERSION:3\n")
-		if err != nil {
-			return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
-		}
-
-		for _, q := range qualities[0:1] {
-			// Извлекаем чистый числовой битрейт для Bandwidth из VideoBitrate и AudioBitrate
-			videoBitrateVal := parseBitrateToBPS(q.VideoBitrate)
-			audioBitrateVal := parseBitrateToBPS(q.AudioBitrate)
-
-			// Суммарный битрейт видео и аудио для параметра BANDWIDTH
-			bandwidth := videoBitrateVal + audioBitrateVal
-
-			_, err := fmt.Fprintf(masterPlaylistFile,
-				"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%s,CODECS=\"avc1.42e01e,mp4a.40.2\"\n",
-				bandwidth,
-				q.Resolution)
-			if err != nil {
-				return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
-			}
-
-			_, err = fmt.Fprintf(masterPlaylistFile, "%s.m3u8\n", q.BaseName)
-			if err != nil {
-				return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
-			}
-		}
-		masterPlaylistFile.Close()
-
+	err := func() error{
 		// 3. Генерируем HLS-поток для каждого качества
 		for _, q := range qualities {
 			err := generateSingleQualityHLS(
@@ -158,13 +119,12 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 
 			}
 		}
+	
 
+	
 		// 4. Создаем мастер-плейлист
-		masterPlaylistFile, err = os.Create(masterPlaylistPath)
-		if err != nil {
-			return fmt.Errorf("не удалось создать мастер-плейлист %s: %w", masterPlaylistPath, err)
-		}
-
+		masterPlaylistPath := filepath.Join(outputPathDir, "main.m3u8")
+		masterPlaylistFile, err := os.Create(masterPlaylistPath)
 		if err != nil {
 			return fmt.Errorf("не удалось создать мастер-плейлист %s: %w", masterPlaylistPath, err)
 		}
@@ -174,7 +134,7 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 		if err != nil {
 			return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
 		}
-		_, err = fmt.Fprintf(masterPlaylistFile, "#EXT-X-VERSION:3\n")
+		_, err = fmt.Fprintf(masterPlaylistFile, "#EXT-X-VERSION:3\n") 
 		if err != nil {
 			return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
 		}
@@ -187,9 +147,10 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 			// Суммарный битрейт видео и аудио для параметра BANDWIDTH
 			bandwidth := videoBitrateVal + audioBitrateVal
 
-			_, err := fmt.Fprintf(masterPlaylistFile,
-				"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%s,CODECS=\"avc1.42e01e,mp4a.40.2\"\n",
-				bandwidth,
+			
+			_, err := fmt.Fprintf(masterPlaylistFile, 
+				"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%s,CODECS=\"avc1.42e01e,mp4a.40.2\"\n", 
+				bandwidth, 
 				q.Resolution)
 			if err != nil {
 				return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
@@ -200,7 +161,6 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 				return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
 			}
 		}
-
 		return nil
 	}()
 	if err != nil {
