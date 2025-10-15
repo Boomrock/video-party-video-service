@@ -93,7 +93,7 @@ func (db *DB) GetVideoByID(id int) (*Video, error) {
 
 // GetVideoByFileName получает видео по его file_name.
 func (db *DB) GetVideoByFileName(fileName string) (*Video, error) {
-	querySQL := `SELECT id, video_name, file_name, hls_converted, hls_error_message FROM videos WHERE file_name = ?`
+	querySQL := `SELECT id, video_name, file_name FROM videos WHERE file_name = ?`
 	row := db.conn.QueryRow(querySQL, fileName)
 
 	var v Video
@@ -181,13 +181,4 @@ func (db *DB) DeleteVideoByFileName(fileName string) error {
 
 	fmt.Printf("Видео с file_name '%s' удалено.\n", fileName)
 	return nil
-}
-
-// UpdateHLSConversionStatus обновляет статус конвертации HLS и сообщение об ошибке.
-func (db *DB) UpdateHLSConversionStatus(mp4FileName string, converted bool, errorMessage string) error {
-	_, err := db.conn.Exec(
-		"UPDATE videos SET hls_converted = ?, hls_error_message = ? WHERE file_name = ?",
-		converted, errorMessage, mp4FileName,
-	)
-	return err
 }
