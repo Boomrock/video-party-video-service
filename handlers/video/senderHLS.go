@@ -86,11 +86,6 @@ func HLSHandler() http.HandlerFunc {
 			)
 		}
 
-		// Устанавливаем заголовки CORS
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
 		http.ServeFile(w, r, filePath)
 
 		slog.Info("HLS файл успешно отдан",
