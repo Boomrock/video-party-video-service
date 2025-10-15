@@ -42,7 +42,7 @@ func generateSingleQualityHLS(
 		"-i", inputPath,
 		"-c:v", "libx264",
 		"-b:v", videoBitrate,
-		"-preset", "medium",
+		"-preset", "ultrafast",
 		"-vf", fmt.Sprintf("scale=%s", resolution),
 		"-c:a", "aac",
 		"-b:a", audioBitrate,
@@ -50,6 +50,7 @@ func generateSingleQualityHLS(
 		"-hls_time", strconv.Itoa(segmentDuration),
 		"-hls_playlist_type", playlistType,
 		"-hls_segment_filename", filepath.Join(outputPathDir, fmt.Sprintf("%s_%%03d.ts", outputBaseName)),
+		"-movflags", "+faststart",
 		outputPlaylistPath,
 	}
 
