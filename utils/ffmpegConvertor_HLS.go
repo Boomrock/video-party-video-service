@@ -97,8 +97,8 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 		//{Resolution: "1920x1080", VideoBitrate: "4M", AudioBitrate: "192k", BaseName: "1080p", Bandwidth: 4250000},
 	}
 
-	segmentDuration := 10 // Длительность каждого сегмента в секундах
-	playlistType := "vod" // Тип плейлиста: "vod" (Video On Demand)
+	segmentDuration := 10   // Длительность каждого сегмента в секундах
+	playlistType := "event" // Тип плейлиста: "vod" (Video On Demand)
 
 	var generatedPlaylists []HLSQuality
 	err := func() error {
