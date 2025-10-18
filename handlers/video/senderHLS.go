@@ -77,8 +77,8 @@ func HLSHandler() http.HandlerFunc {
 		// Устанавливаем правильный Content-Type
 		if strings.HasSuffix(fileName, ".m3u8") { // Проверяем fileName, т.к. hlsRelativePath содержит videoID
 			w.Header().Set("Content-Type", "application/x-mpegURL")
-		} else if strings.HasSuffix(fileName, ".ts") {
-			w.Header().Set("Content-Type", "video/mp2t")
+		} else if strings.HasSuffix(fileName, ".fmp4") {
+			w.Header().Set("Content-Type", "video/iso.segment")
 		} else {
 			slog.Warn("Неизвестное расширение файла HLS, Content-Type не установлен явно",
 				"путь_файла", relativePath, // Здесь лучше использовать relativePath
