@@ -53,7 +53,8 @@ func generateSingleQualityHLS(
 		"-hls_flags", "temp_file",
 		"-hls_time", strconv.Itoa(segmentDuration),
 		"-hls_playlist_type", playlistType,
-		"-hls_segment_filename", filepath.Join(outputPathDir, fmt.Sprintf("%s_%%03d.ts", outputBaseName)),
+		"-hls_segment_type", "fmp4",
+		"-hls_segment_filename", filepath.Join(outputPathDir, fmt.Sprintf("%s_%%03d.fmp4", outputBaseName)),
 		outputPlaylistPath,
 	}
 
@@ -105,6 +106,11 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 
 	var generatedPlaylists []HLSQuality
 	err := func() error {
+		err := createMasterPlaylist(outputPathDir, qualities)
+		
+		if(err != nil){
+			return err
+		}
 		// 3. Генерируем HLS-поток для каждого качества
 		for _, q := range qualities {
 			err := generateSingleQualityHLS(
@@ -123,44 +129,6 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 			}
 		}
 
-		// 4. Создаем мастер-плейлист
-		masterPlaylistPath := filepath.Join(outputPathDir, "main.m3u8")
-		masterPlaylistFile, err := os.Create(masterPlaylistPath)
-		if err != nil {
-			return fmt.Errorf("не удалось создать мастер-плейлист %s: %w", masterPlaylistPath, err)
-		}
-		defer masterPlaylistFile.Close()
-
-		_, err = fmt.Fprintf(masterPlaylistFile, "#EXTM3U\n")
-		if err != nil {
-			return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
-		}
-		_, err = fmt.Fprintf(masterPlaylistFile, "#EXT-X-VERSION:3\n")
-		if err != nil {
-			return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
-		}
-
-		for _, q := range generatedPlaylists {
-			// Извлекаем чистый числовой битрейт для Bandwidth из VideoBitrate и AudioBitrate
-			videoBitrateVal := parseBitrateToBPS(q.VideoBitrate)
-			audioBitrateVal := parseBitrateToBPS(q.AudioBitrate)
-
-			// Суммарный битрейт видео и аудио для параметра BANDWIDTH
-			bandwidth := videoBitrateVal + audioBitrateVal
-
-			_, err := fmt.Fprintf(masterPlaylistFile,
-				"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%s,CODECS=\"avc1.42e01e,mp4a.40.2\"\n",
-				bandwidth,
-				q.Resolution)
-			if err != nil {
-				return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
-			}
-
-			_, err = fmt.Fprintf(masterPlaylistFile, "%s.m3u8\n", q.BaseName)
-			if err != nil {
-				return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
-			}
-		}
 		return nil
 	}()
 	if err != nil {
@@ -169,6 +137,47 @@ func GenerateAdaptiveHLS(inputFolder, outputFoler, originalFileName string) erro
 			return fmt.Errorf("ошибка обработки видео: %v; дополнительно: не удалось удалить директорию: %v", err, removeErr)
 		}
 		return fmt.Errorf("ошибка обработки видео: %w", err)
+	}
+	return nil
+}
+
+func createMasterPlaylist(outputPathDir string, generatedPlaylists []HLSQuality) error {
+	masterPlaylistPath := filepath.Join(outputPathDir, "main.m3u8")
+	masterPlaylistFile, err := os.Create(masterPlaylistPath)
+	if err != nil {
+		return fmt.Errorf("не удалось создать мастер-плейлист %s: %w", masterPlaylistPath, err)
+	}
+	defer masterPlaylistFile.Close()
+
+	_, err = fmt.Fprintf(masterPlaylistFile, "#EXTM3U\n")
+	if err != nil {
+		return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
+	}
+	_, err = fmt.Fprintf(masterPlaylistFile, "#EXT-X-VERSION:3\n")
+	if err != nil {
+		return fmt.Errorf("ошибка записи в мастер-плейлист: %w", err)
+	}
+
+	for _, q := range generatedPlaylists {
+		// Извлекаем чистый числовой битрейт для Bandwidth из VideoBitrate и AudioBitrate
+		videoBitrateVal := parseBitrateToBPS(q.VideoBitrate)
+		audioBitrateVal := parseBitrateToBPS(q.AudioBitrate)
+
+		// Суммарный битрейт видео и аудио для параметра BANDWIDTH
+		bandwidth := videoBitrateVal + audioBitrateVal
+
+		_, err := fmt.Fprintf(masterPlaylistFile,
+			"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%s,CODECS=\"avc1.42e01e,mp4a.40.2\"\n",
+			bandwidth,
+			q.Resolution)
+		if err != nil {
+			return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
+		}
+
+		_, err = fmt.Fprintf(masterPlaylistFile, "%s.m3u8\n", q.BaseName)
+		if err != nil {
+			return fmt.Errorf("ошибка записи в мастер-плейлист для качества %s: %w", q.BaseName, err)
+		}
 	}
 	return nil
 }
