@@ -37,6 +37,7 @@ func main() {
 	router.Use(middleware.Timeout(30 * time.Second)) // Таймаут на обработку
 
 	router.Route("/video", func(r chi.Router) {
+		r.Use(CORSMiddleware)
 		r.Get("/", video.Sender(&streamer, sqllite))
 		r.Get("/all", video.GetAllVideo(sqllite))
 		r.Post("/upload", video.Upload(sqllite))
@@ -46,4 +47,17 @@ func main() {
 
 	fmt.Println("Сервер запущен на http://localhost:3030")
 	http.ListenAndServe(":3030", router)
+}
+func CORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
